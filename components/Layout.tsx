@@ -1,4 +1,5 @@
-import { Menu, X, Home, Users, Settings, FileText, ChevronRight, LogOut, ChevronLeft, Layers, ChevronDown, Circle } from 'lucide-react';
+
+import { Menu, X, Home, Users, Settings, FileText, ChevronRight, LogOut, ChevronLeft, Layers, ChevronDown, Circle, Search } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Category } from '../types';
 import { dbService } from '../services/dbService';
@@ -32,7 +33,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
     { id: 'programs', label: 'برنامه‌های مدرسه', icon: FileText, perm: 'programs' },
     { id: 'council', label: 'مصوبات شورا', icon: FileText, perm: 'council' },
     { id: 'workgroups', label: 'مصوبات کارگروه‌ها', icon: Users, perm: 'workgroups', hasSubmenu: true },
-    { id: 'by-grade', label: 'مصوبات بر اساس پایه', icon: Layers, perm: 'byGrade' },
+    { id: 'by-grade', label: 'مشاهده مصوبات', icon: Search, perm: 'byGrade' },
     { id: 'admin', label: 'مدیریت کاربران', icon: Settings, adminOnly: true },
   ];
 

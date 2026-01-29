@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, Resolution, Category } from '../types';
-import { BookOpen, Calendar, ShieldAlert, Award, ChevronRight, CheckCircle, ExternalLink, School, Users, X, FileText, MapPin, Layers, Image as ImageIcon } from 'lucide-react';
+import { BookOpen, Calendar, ShieldAlert, Award, ChevronRight, CheckCircle, ExternalLink, School, Users, X, FileText, MapPin, Layers, Image as ImageIcon, Trash2, ChevronDown, ChevronUp, Square, CheckSquare, Loader2 } from 'lucide-react';
 import { dbService } from '../services/dbService';
 
 interface DashboardProps {
@@ -10,30 +10,69 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ user, setActiveTab }) => {
-  const [myTasks, setMyTasks] = useState<Resolution[]>([]);
+  const [tasks, setTasks] = useState<{ pending: Resolution[], completed: Resolution[] }>({ pending: [], completed: [] });
   const [selectedRes, setSelectedRes] = useState<Resolution | null>(null);
-  const [stats, setStats] = useState({ workgroupRes: 0, councilRes: 0, setWorkgroups: 0, workgroups: 0 });
+  const [stats, setStats] = useState({ workgroupRes: 0, councilRes: 0, workgroups: 0 });
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const allRes = await dbService.getResolutions();
-      const allCats = await dbService.getCategories();
-      
-      const userRoleTitle = user.title;
-      setMyTasks(allRes.filter(r => r.executor === userRoleTitle && (r.is_approved || r.isApproved)));
-      
-      const wgCats = allCats.filter(c => c.type === 'workgroups');
-      const wgIds = wgCats.map(c => c.id);
-      
-      setStats({
-        workgroupRes: allRes.filter(r => wgIds.includes(r.parent_id || r.parentId || '')).length,
-        councilRes: allRes.filter(r => (r.parent_id === 'council-root' || r.parentId === 'council-root' || r.workgroup === 'شورای مدرسه')).length,
-        setWorkgroups: 0, // Unused placeholder
-        workgroups: wgCats.filter(c => (c.parent_id === null || c.parentId === null)).length
-      });
-    };
     fetchData();
   }, [user]);
+
+  const fetchData = async () => {
+    const allRes = await dbService.getResolutions();
+    const allCats = await dbService.getCategories();
+    
+    // مصوباتی که کاربر مسئول آن‌هاست
+    const userRoleTitle = user.title;
+    const myTasks = allRes.filter(r => r.executor === userRoleTitle);
+    
+    setTasks({
+      pending: myTasks.filter(r => !r.isCompleted && !r.is_completed),
+      completed: myTasks.filter(r => r.isCompleted || r.is_completed)
+    });
+    
+    const wgCats = allCats.filter(c => c.type === 'workgroups');
+    const wgIds = wgCats.map(c => c.id);
+    
+    setStats({
+      workgroupRes: allRes.filter(r => wgIds.includes(r.parent_id || r.parentId || '')).length,
+      councilRes: allRes.filter(r => (r.parent_id === 'council-root' || r.parentId === 'council-root')).length,
+      workgroups: wgCats.filter(c => (c.parent_id === null || c.parentId === null)).length
+    });
+  };
+
+  const toggleTaskStatus = async (task: Resolution) => {
+    setIsActionLoading(task.id);
+    try {
+      const currentStatus = (task.isCompleted || task.is_completed);
+      const updatedTask = { 
+        ...task, 
+        isCompleted: !currentStatus,
+        is_completed: !currentStatus 
+      };
+      await dbService.saveResolution(updatedTask);
+      await fetchData();
+    } catch (err) {
+      alert('خطا در به‌روزرسانی وضعیت');
+    } finally {
+      setIsActionLoading(null);
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    if (!confirm('آیا از حذف این مصوبه از لیست خود اطمینان دارید؟')) return;
+    setIsActionLoading(taskId);
+    try {
+      await dbService.deleteResolution(taskId);
+      await fetchData();
+    } catch (err) {
+      alert('خطا در حذف');
+    } finally {
+      setIsActionLoading(null);
+    }
+  };
 
   const statItems = [
     { label: 'مصوبات کارگروه ها', value: stats.workgroupRes, icon: BookOpen, color: 'bg-emerald-500' },
@@ -42,59 +81,87 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setActiveTab }) => {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-      <div className="relative overflow-hidden bg-emerald-900 text-white p-8 md:p-12 rounded-[3rem] shadow-2xl">
-        <div className="relative z-10 max-w-2xl">
-          <h1 className="text-2xl md:text-3xl font-black mb-4 leading-relaxed">
-            سلام، {user.fullName}
-          </h1>
-          <p className="text-emerald-100 text-lg opacity-90 leading-relaxed mb-8">
-            به سامانه جامع برنامه‌ها و مصوبات مدرسه علمیه امام رضا علیه السلام خوش آمدید.
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <button 
-              onClick={() => setActiveTab('programs')}
-              className="bg-white text-emerald-900 px-8 py-4 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-3"
-            >
-              مشاهده برنامه‌ها <Calendar size={20} />
-            </button>
-          </div>
-        </div>
-        <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-700 rounded-full mix-blend-multiply filter blur-3xl opacity-30 -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 text-right">
+      <div className="bg-emerald-900 text-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
+        <h1 className="text-3xl font-black mb-4">سلام، {user.fullName}</h1>
+        <p className="text-emerald-100 text-lg opacity-90 font-bold">وظایف و مصوبات شما در یک نگاه</p>
+        <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-700/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 min-h-[400px]">
-            <h3 className="text-2xl font-black text-black mb-8 flex items-center gap-3 border-r-4 border-amber-500 pr-4">
-              <CheckCircle className="text-amber-500" size={28} /> مصوباتی که مسئول پیگیری آن‌ها هستم
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 min-h-[500px]">
+            <h3 className="text-2xl font-black text-black mb-8 flex items-center gap-3 border-r-4 border-emerald-500 pr-4">
+              <CheckCircle className="text-emerald-500" size={28} /> چک‌لیست کارهای من
             </h3>
             
-            {myTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-400 opacity-50">
-                <BookOpen size={64} className="mb-4" />
-                <p className="font-bold">موردی برای نمایش یافت نشد</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {myTasks.map(task => (
+            <div className="space-y-4">
+              {tasks.pending.length === 0 && (
+                <div className="text-center py-10 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-gray-400 font-bold">
+                  در حال حاضر کار معلقی ندارید
+                </div>
+              )}
+
+              {/* Pending Tasks */}
+              {tasks.pending.map(task => (
+                <div key={task.id} className="group flex items-center gap-4 p-5 bg-gray-50 rounded-[2rem] border border-gray-100 hover:border-emerald-200 transition-all shadow-sm">
                   <button 
-                    key={task.id}
-                    onClick={() => setSelectedRes(task)}
-                    className="p-6 bg-gray-50 rounded-3xl border border-gray-100 text-right hover:border-emerald-200 hover:bg-emerald-50 transition-all group"
+                    disabled={isActionLoading === task.id}
+                    onClick={() => toggleTaskStatus(task)} 
+                    className="text-emerald-600 hover:scale-110 transition-transform disabled:opacity-50"
                   >
-                    <div className="flex justify-between items-start mb-2">
-                       <span className="text-[10px] font-black bg-white px-2 py-1 rounded-lg text-emerald-600 border border-emerald-100">
-                          {task.workgroup}
-                       </span>
-                       <ChevronRight size={16} className="text-gray-300 group-hover:text-emerald-500 transition-colors" />
-                    </div>
-                    <h4 className="font-black text-black text-lg mb-2">{task.title}</h4>
-                    <p className="text-xs text-gray-500 font-bold line-clamp-2">{task.description}</p>
+                    {isActionLoading === task.id ? <Loader2 className="animate-spin" size={24} /> : <Square size={28} />}
                   </button>
-                ))}
-              </div>
-            )}
+                  <div className="flex-1 cursor-pointer" onClick={() => setSelectedRes(task)}>
+                    <h4 className="font-black text-black text-lg">{task.title}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-bold">{task.workgroup}</span>
+                      {task.grade && <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">{task.grade}</span>}
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => deleteTask(task.id)} 
+                    className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="حذف از لیست من"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              ))}
+
+              {/* Completed Tasks Accordion */}
+              {tasks.completed.length > 0 && (
+                <div className="pt-6">
+                   <button 
+                     onClick={() => setShowCompleted(!showCompleted)}
+                     className="w-full flex items-center justify-between p-5 bg-emerald-50 rounded-3xl text-emerald-800 font-black border border-emerald-100 shadow-sm"
+                   >
+                     <span className="flex items-center gap-2">
+                       <CheckCircle size={22} className="text-emerald-600" /> کارهای انجام شده ({tasks.completed.length})
+                     </span>
+                     {showCompleted ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                   </button>
+                   
+                   {showCompleted && (
+                     <div className="mt-4 space-y-3 animate-in slide-in-from-top-4 duration-300">
+                       {tasks.completed.map(task => (
+                         <div key={task.id} className="group flex items-center gap-4 p-4 bg-gray-50/50 rounded-2xl border border-gray-100 opacity-70">
+                           <button onClick={() => toggleTaskStatus(task)} className="text-emerald-600">
+                             <CheckSquare size={24} />
+                           </button>
+                           <div className="flex-1 line-through font-bold text-gray-500 text-sm">
+                             {task.title}
+                           </div>
+                           <button onClick={() => deleteTask(task.id)} className="p-2 text-gray-300 hover:text-red-500">
+                             <Trash2 size={18} />
+                           </button>
+                         </div>
+                       ))}
+                     </div>
+                   )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -116,66 +183,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setActiveTab }) => {
       {selectedRes && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white rounded-[3rem] w-full max-w-3xl max-h-[90vh] overflow-y-auto p-10 shadow-2xl relative animate-in zoom-in-95">
-              <button onClick={() => setSelectedRes(null)} className="absolute top-8 left-8 p-3 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors">
+              <button onClick={() => setSelectedRes(null)} className="absolute top-8 left-8 p-3 bg-gray-100 rounded-full hover:bg-gray-200">
                 <X size={24} />
               </button>
-              
-              <div className="flex items-center gap-2 mb-4">
-                <span className="bg-emerald-50 text-emerald-700 px-4 py-1.5 rounded-xl text-xs font-black border border-emerald-100 flex items-center gap-2">
-                  <MapPin size={14} /> {selectedRes.workgroup}
-                </span>
-                {selectedRes.grade && (
-                  <span className="bg-blue-50 text-blue-700 px-4 py-1.5 rounded-xl text-xs font-black border border-blue-100 flex items-center gap-2">
-                    <Layers size={14} /> {selectedRes.grade}
-                  </span>
-                )}
-              </div>
-
-              <h2 className="text-3xl font-black text-black mb-8 leading-tight pr-5 border-r-8 border-emerald-500">{selectedRes.title}</h2>
-              
-              <div className="space-y-8 text-black">
-                <div className="bg-gray-50 p-8 rounded-[2rem] border border-gray-100 leading-relaxed text-lg text-justify font-bold">
-                  {selectedRes.description}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                   <div className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4">
-                      <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center"><Calendar size={24} /></div>
-                      <div>
-                        <p className="text-[10px] font-black text-gray-400">تاریخ ثبت</p>
-                        <p className="font-black text-sm">{selectedRes.createdAt || selectedRes.created_at}</p>
-                      </div>
-                   </div>
-                   {selectedRes.executor && (
-                     <div className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4">
-                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><Users size={24} /></div>
-                        <div>
-                          <p className="text-[10px] font-black text-gray-400">مسئول پیگیری</p>
-                          <p className="font-black text-sm">{selectedRes.executor}</p>
-                        </div>
-                     </div>
-                   )}
-                </div>
-
-                {selectedRes.images && selectedRes.images.length > 0 && (
-                   <div className="space-y-4">
-                      <h4 className="text-lg font-black text-black flex items-center gap-2"><ImageIcon size={20} className="text-emerald-500" /> مستندات و پیوست‌ها</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                        {selectedRes.images.map((img, i) => (
-                          <a href={img} target="_blank" key={i} className="aspect-square rounded-2xl overflow-hidden shadow-sm border border-gray-100 group">
-                            {img.includes('.pdf') ? (
-                              <div className="w-full h-full bg-red-50 flex flex-col items-center justify-center text-red-600">
-                                <FileText size={40} />
-                                <span className="text-[10px] font-black mt-1">PDF</span>
-                              </div>
-                            ) : (
-                              <img src={img} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                            )}
-                          </a>
-                        ))}
-                      </div>
-                   </div>
-                )}
+              <h2 className="text-3xl font-black text-black mb-8 border-r-8 border-emerald-500 pr-5 leading-tight">{selectedRes.title}</h2>
+              <div className="bg-gray-50 p-8 rounded-[2rem] border border-gray-100 leading-relaxed text-lg font-bold text-justify">
+                {selectedRes.description}
               </div>
            </div>
         </div>
