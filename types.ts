@@ -59,6 +59,8 @@ export interface Resolution {
   images: string[];
   isApproved?: boolean; // TS side
   is_approved?: boolean; // DB side
+  isCompleted?: boolean; // New: For Dashboard Checklist
+  is_completed?: boolean; // New: For DB
   discussionTime?: string;
   discussion_time?: string;
 }
