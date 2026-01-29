@@ -108,6 +108,7 @@ export const dbService = {
         executionDate: r.execution_date,
         executionTerm: r.execution_term,
         isApproved: r.is_approved,
+        isCompleted: r.is_completed,
         discussionTime: r.discussion_time
       }));
     } catch { return []; }
@@ -136,6 +137,7 @@ export const dbService = {
         executionDate: r.execution_date,
         executionTerm: r.execution_term,
         isApproved: r.is_approved,
+        isCompleted: r.is_completed,
         discussionTime: r.discussion_time
       }));
     } catch { return []; }
@@ -157,6 +159,7 @@ export const dbService = {
       execution_term: res.execution_term || res.executionTerm,
       images: res.images || [],
       is_approved: res.is_approved ?? res.isApproved,
+      is_completed: res.is_completed ?? res.isCompleted ?? false,
       discussion_time: res.discussion_time || res.discussionTime
     }]);
     if (error) throw error;
@@ -167,7 +170,6 @@ export const dbService = {
     if (error) throw error;
   },
 
-  // Fixed Workgroup PDF Methods
   getWorkgroupPDFs: async (workgroupId: string): Promise<WorkgroupPDF[]> => {
     try {
       const { data, error } = await supabase
@@ -190,14 +192,13 @@ export const dbService = {
   },
 
   saveWorkgroupPDF: async (pdf: WorkgroupPDF) => {
-    // We use the ACTUAL workgroupId as parent_id to satisfy FK constraints
     const { error } = await supabase.from('resolutions').upsert([{
       id: pdf.id,
       parent_id: pdf.workgroupId, 
       title: pdf.title,
       description: pdf.description,
       images: [pdf.fileUrl],
-      lesson: PDF_MARKER, // This marker hides it from normal resolution lists
+      lesson: PDF_MARKER,
       workgroup: 'بایگانی اسناد',
       executor: 'سیستم',
       created_at: pdf.createdAt || new Date().toISOString(),
